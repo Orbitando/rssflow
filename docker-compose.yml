@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  web:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    ports:
+      - "8282:80"
+    volumes:
+      - ./src:/var/www/html
+      - ./data:/var/www/data
+    user: "www-data:www-data"
+    working_dir: /var/www/html
+    restart: unless-stopped
