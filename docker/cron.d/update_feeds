@@ -1,0 +1,2 @@
+# Esegue lo script di aggiornamento feed ogni 15 minuti
+*/15 * * * * php /var/www/cron/aggiorna.php >> /var/log/aggiorna_feeds.log 2>&1
