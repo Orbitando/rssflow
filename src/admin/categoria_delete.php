@@ -1,35 +1,24 @@
 <?php
-require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/../middleware.php';
 
 require_auth();
 $user = current_user();
 $is_admin = is_admin();
 
 $id = $_GET['id'] ?? null;
-$categoria_id = $_GET['categoria_id'] ?? null;
-if (!$id || !$categoria_id) {
+if (!$id) {
     http_response_code(400);
-    exit('Parametri mancanti.');
+    exit('ID categoria mancante.');
 }
 
-// Carica il feed
-$stmt = $db->prepare("SELECT * FROM feed WHERE id = ?");
-$stmt->execute([$id]);
-$feed = $stmt->fetch(PDO::FETCH_ASSOC);
-if (!$feed) {
-    http_response_code(404);
-    exit('Feed non trovato.');
-}
-
-// Carica la categoria per controllo permessi
+// Carica la categoria
 $stmt = $db->prepare("SELECT * FROM categorie WHERE id = ?");
-$stmt->execute([$categoria_id]);
+$stmt->execute([$id]);
 $cat = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$cat) {
     http_response_code(404);
     exit('Categoria non trovata.');
 }
-
 // Solo admin o proprietario
 if (!$is_admin && $cat['utente_id'] != $user['id']) {
     http_response_code(403);
@@ -37,9 +26,16 @@ if (!$is_admin && $cat['utente_id'] != $user['id']) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $stmt = $db->prepare("DELETE FROM feed WHERE id = ?");
-    $stmt->execute([$id]);
-    header('Location: feed_gestione.php?categoria_id=' . $categoria_id);
+    // Cancella la categoria (i feed vengono cancellati in cascata)
+    if (!$is_admin) {
+        // Ensure regular user can only delete their own category
+        $stmt = $db->prepare("DELETE FROM categorie WHERE id = ? AND utente_id = ?");
+        $stmt->execute([$id, $user['id']]);
+    } else {
+        $stmt = $db->prepare("DELETE FROM categorie WHERE id = ?");
+        $stmt->execute([$id]);
+    }
+    header('Location: categorie.php');
     exit;
 }
 ?>
@@ -47,18 +43,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Cancella feed</title>
+    <title>Cancella categoria</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
 <div class="container py-4">
-    <h1>Cancella feed</h1>
+    <h1>Cancella categoria</h1>
     <div class="alert alert-warning">
-        Sei sicuro di voler cancellare il feed <b><?= htmlspecialchars($feed['url']) ?></b>?
+        Sei sicuro di voler cancellare la categoria <b><?= htmlspecialchars($cat['nome']) ?></b>?
+        <br>
+        <small>I feed associati saranno eliminati.</small>
     </div>
     <form method="post">
         <button type="submit" class="btn btn-danger">Conferma cancellazione</button>
-        <a href="feed_gestione.php?categoria_id=<?= $categoria_id ?>" class="btn btn-secondary">Annulla</a>
+        <a href="categorie.php" class="btn btn-secondary">Annulla</a>
     </form>
 </div>
 </body>

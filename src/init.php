@@ -39,6 +39,28 @@ $db->exec("
     )
 ");
 
+// Crea la tabella password_reset_tokens se non esiste
+$db->exec("
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES utenti(id) ON DELETE CASCADE
+    )
+");
+
+// Crea la tabella remember_tokens se non esiste
+$db->exec("
+    CREATE TABLE IF NOT EXISTS remember_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES utenti(id) ON DELETE CASCADE
+    )
+");
+
 // Crea la tabella feed se non esiste
 $db->exec("
     CREATE TABLE IF NOT EXISTS feed (

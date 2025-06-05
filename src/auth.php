@@ -2,7 +2,7 @@
 require_once __DIR__ . '/init.php';
 
 // Funzione per autenticare l'utente
-function login($email, $password) {
+function login($email, $password, $remember = false) {
     global $db;
     $stmt = $db->prepare("SELECT * FROM utenti WHERE email = ?");
     $stmt->execute([$email]);
@@ -11,6 +11,18 @@ function login($email, $password) {
         // Salva dati essenziali in sessione
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_role'] = $user['ruolo'];
+
+        if ($remember) {
+            // Generate a random token
+            $token = bin2hex(random_bytes(16));
+            // Store token in database with user id and expiration (30 days)
+            $expires = time() + 60 * 60 * 24 * 30;
+            $stmt = $db->prepare("INSERT INTO remember_tokens (user_id, token, expires_at) VALUES (?, ?, ?)");
+            $stmt->execute([$user['id'], $token, $expires]);
+            // Set cookie
+            setcookie('remember_token', $token, $expires, '/', '', false, true);
+        }
+
         return true;
     }
     return false;

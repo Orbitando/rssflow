@@ -1,5 +1,7 @@
 <?php
-require_once __DIR__ . '/middleware.php';
+require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../middleware.php';
+require_once __DIR__ . '/layout_admin.php';
 
 require_auth();
 $user = current_user();
@@ -48,8 +50,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Slug già in uso.';
         } else {
             if ($editing) {
-                $stmt = $db->prepare("UPDATE categorie SET nome = ?, slug = ?, rimuovi_duplicati = ? WHERE id = ?");
-                $stmt->execute([$nome, $slug, $rimuovi_duplicati, $id]);
+                if (!$is_admin) {
+                    // Ensure regular user can only update their own category
+                    $stmt = $db->prepare("UPDATE categorie SET nome = ?, slug = ?, rimuovi_duplicati = ? WHERE id = ? AND utente_id = ?");
+                    $stmt->execute([$nome, $slug, $rimuovi_duplicati, $id, $user['id']]);
+                } else {
+                    $stmt = $db->prepare("UPDATE categorie SET nome = ?, slug = ?, rimuovi_duplicati = ? WHERE id = ?");
+                    $stmt->execute([$nome, $slug, $rimuovi_duplicati, $id]);
+                }
             } else {
                 $stmt = $db->prepare("INSERT INTO categorie (nome, slug, utente_id, rimuovi_duplicati) VALUES (?, ?, ?, ?)");
                 $stmt->execute([$nome, $slug, $utente_id, $rimuovi_duplicati]);

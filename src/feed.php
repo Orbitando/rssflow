@@ -1,18 +1,20 @@
 <?php
-require_once __DIR__ . '/init.php';
+// Public RSS feed aggregator for a category by fetching original feed URLs
 
 header('Content-Type: application/rss+xml; charset=utf-8');
 
-$slug = $_GET['categoria'] ?? '';
-if (!$slug) {
+require_once __DIR__ . '/init.php';
+
+$categoria_slug = $_GET['categoria'] ?? null;
+if (!$categoria_slug) {
     http_response_code(400);
-    echo "Parametro categoria mancante.";
+    echo "Categoria mancante.";
     exit;
 }
 
-// Recupera categoria
+// Load category
 $stmt = $db->prepare("SELECT * FROM categorie WHERE slug = ?");
-$stmt->execute([$slug]);
+$stmt->execute([$categoria_slug]);
 $cat = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$cat) {
     http_response_code(404);
@@ -20,92 +22,99 @@ if (!$cat) {
     exit;
 }
 
-// Recupera feed associati
+// Fetch feeds in category
 $stmt = $db->prepare("SELECT url FROM feed WHERE categoria_id = ?");
 $stmt->execute([$cat['id']]);
-$feeds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+$feed_urls = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-if (count($feeds) === 0) {
-    http_response_code(404);
-    echo "Nessun feed associato a questa categoria.";
+if (count($feed_urls) === 0) {
+    // No feeds in category, output empty RSS feed
+    echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+    ?>
+    <rss version="2.0">
+    <channel>
+        <title><?= htmlspecialchars($cat['nome']) ?> - RSS Aggregator</title>
+        <link><?= htmlspecialchars('http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']) ?></link>
+        <description>Aggregated RSS feed for category <?= htmlspecialchars($cat['nome']) ?></description>
+        <language>it-it</language>
+        <lastBuildDate><?= date(DATE_RSS) ?></lastBuildDate>
+    </channel>
+    </rss>
+    <?php
     exit;
 }
 
-// Funzione per scaricare e parsare feed RSS
+// Function to fetch and parse RSS feed from URL
 function fetch_feed_items($url) {
-    $content = @file_get_contents($url);
-    if (!$content) return [];
-    $xml = @simplexml_load_string($content);
-    if (!$xml) return [];
     $items = [];
+    $content = @file_get_contents($url);
+    if ($content === false) {
+        return $items;
+    }
+    libxml_use_internal_errors(true);
+    $xml = simplexml_load_string($content, 'SimpleXMLElement', LIBXML_NOCDATA);
+    if ($xml === false) {
+        return $items;
+    }
     if (isset($xml->channel->item)) {
+        $count = 0;
         foreach ($xml->channel->item as $item) {
-            $items[] = $item;
-        }
-    } elseif (isset($xml->entry)) { // Atom feed
-        foreach ($xml->entry as $item) {
-            $items[] = $item;
+            if ($count >= 5) break;
+            $items[] = [
+                'title' => (string)$item->title,
+                'link' => (string)$item->link,
+                'description' => (string)$item->description,
+                'pubDate' => (string)$item->pubDate,
+            ];
+            $count++;
         }
     }
     return $items;
 }
 
-function remove_duplicates($items) {
-    $seen = [];
-    $result = [];
-    foreach ($items as $item) {
-        $guid = (string)($item->guid ?? $item->link ?? '');
-        if ($guid === '') {
-            // fallback: title + pubDate
-            $guid = md5((string)$item->title . (string)($item->pubDate ?? $item->updated ?? ''));
-        }
-        if (!isset($seen[$guid])) {
-            $seen[$guid] = true;
-            $result[] = $item;
+// Aggregate items from all feeds
+$all_items = [];
+foreach ($feed_urls as $url) {
+    $feed_items = fetch_feed_items($url);
+    $all_items = array_merge($all_items, $feed_items);
+}
+
+// Optionally remove duplicates by link
+if ($cat['rimuovi_duplicati']) {
+    $unique_items = [];
+    $links = [];
+    foreach ($all_items as $item) {
+        if (!in_array($item['link'], $links)) {
+            $links[] = $item['link'];
+            $unique_items[] = $item;
         }
     }
-    return $result;
+    $all_items = $unique_items;
 }
 
-// Aggrega tutti gli item
-$all_items = [];
-foreach ($feeds as $feed_url) {
-    $items = fetch_feed_items($feed_url);
-    $all_items = array_merge($all_items, $items);
-}
-
-// Rimuovi duplicati se impostato
-if ($cat['rimuovi_duplicati']) {
-    $all_items = remove_duplicates($all_items);
-}
-
-// Ordina per data (se presente)
+// Sort items by pubDate descending
 usort($all_items, function($a, $b) {
-    $dateA = strtotime((string)($a->pubDate ?? $a->updated ?? ''));
-    $dateB = strtotime((string)($b->pubDate ?? $b->updated ?? ''));
-    return $dateB <=> $dateA;
+    return strtotime($b['pubDate']) - strtotime($a['pubDate']);
 });
 
-// Limita a 20 item
-$all_items = array_slice($all_items, 0, 20);
-
-// Output RSS
+// Generate RSS feed XML
 echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 ?>
 <rss version="2.0">
 <channel>
-    <title>Feed aggregato: <?= htmlspecialchars($cat['nome']) ?></title>
-    <link><?= htmlspecialchars((isset($_SERVER['HTTPS']) ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]") ?></link>
-    <description>Feed aggregato per la categoria <?= htmlspecialchars($cat['nome']) ?></description>
+    <title><?= htmlspecialchars($cat['nome']) ?> - RSS Aggregator</title>
+    <link><?= htmlspecialchars('http://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']) ?></link>
+    <description>Aggregated RSS feed for category <?= htmlspecialchars($cat['nome']) ?></description>
     <language>it-it</language>
+    <lastBuildDate><?= date(DATE_RSS) ?></lastBuildDate>
     <?php foreach ($all_items as $item): ?>
-        <item>
-            <title><?= htmlspecialchars((string)$item->title) ?></title>
-            <link><?= htmlspecialchars((string)$item->link) ?></link>
-            <description><![CDATA[<?= (string)$item->description ?? $item->summary ?? '' ?>]]></description>
-            <pubDate><?= htmlspecialchars((string)$item->pubDate ?? $item->updated ?? '') ?></pubDate>
-            <guid><?= htmlspecialchars((string)$item->guid ?? $item->link ?? '') ?></guid>
-        </item>
+    <item>
+        <title><?= htmlspecialchars($item['title']) ?></title>
+        <link><?= htmlspecialchars($item['link']) ?></link>
+        <description><![CDATA[<?= $item['description'] ?>]]></description>
+        <pubDate><?= htmlspecialchars($item['pubDate']) ?></pubDate>
+        <guid><?= htmlspecialchars($item['link']) ?></guid>
+    </item>
     <?php endforeach; ?>
 </channel>
 </rss>
