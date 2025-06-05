@@ -39,9 +39,9 @@ RSSFlow è un'applicazione PHP che permette la gestione di feed RSS organizzati 
 2. Assicurati che PHP e SQLite siano installati.
 3. Avvia il server PHP di sviluppo:
    ```
-   php -S localhost:8000 -t src
+   php -S localhost:8282 -t src
    ```
-4. Accedi a `http://localhost:8000/login.php` con l'admin di default:
+4. Accedi a `http://localhost:8282/login.php` con l'admin di default:
    - Email: `admin@example.com`
    - Password: `admin123`
 5. Gestisci categorie e feed tramite l'interfaccia.
