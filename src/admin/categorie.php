@@ -49,12 +49,55 @@ render_header_admin('Gestione Categorie');
 document.querySelectorAll('.copy-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
         const link = location.origin + btn.getAttribute('data-link');
-        navigator.clipboard.writeText(link).then(function() {
-            btn.textContent = 'Copiato!';
-            setTimeout(() => btn.textContent = 'Copia link feed', 1500);
-        });
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(function() {
+                btn.textContent = 'Copiato!';
+                setTimeout(() => btn.textContent = 'Copia link feed', 1500);
+            }).catch(function(err) {
+                console.error('Errore nella copia:', err);
+                fallbackCopyTextToClipboard(link, btn);
+            });
+        } else {
+            fallbackCopyTextToClipboard(link, btn);
+        }
     });
 });
+
+function fallbackCopyTextToClipboard(text, btn) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    // Avoid scrolling to bottom
+    textArea.style.position = "fixed";
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.width = "2em";
+    textArea.style.height = "2em";
+    textArea.style.padding = 0;
+    textArea.style.border = "none";
+    textArea.style.outline = "none";
+    textArea.style.boxShadow = "none";
+    textArea.style.background = "transparent";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            btn.textContent = 'Copiato!';
+            setTimeout(() => btn.textContent = 'Copia link feed', 1500);
+        } else {
+            btn.textContent = 'Errore copia';
+            setTimeout(() => btn.textContent = 'Copia link feed', 1500);
+        }
+    } catch (err) {
+        console.error('Fallback copia non riuscita', err);
+        btn.textContent = 'Errore copia';
+        setTimeout(() => btn.textContent = 'Copia link feed', 1500);
+    }
+
+    document.body.removeChild(textArea);
+}
 </script>
 <?php
 render_footer_admin();
